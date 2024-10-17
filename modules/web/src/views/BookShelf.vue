@@ -59,7 +59,7 @@
       </div>
       <div class="bottom-icons">
         <a
-          href="https://github.com/gedoor/legado_web_bookshelf"
+          href="https://gitee.com/cyh92/legado/tree/master/modules/web"
           target="_blank"
         >
           <div class="bottom-icon">
