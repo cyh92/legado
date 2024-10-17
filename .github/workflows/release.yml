@@ -11,7 +11,7 @@ on:
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/cyh92'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/dev'
     outputs:
       version: ${{ steps.set-ver.outputs.version }}
       play: ${{ steps.check.outputs.play }}
@@ -60,7 +60,7 @@ jobs:
           echo RELEASE_STORE_PASSWORD='${{ secrets.RELEASE_STORE_PASSWORD }}' >> gradle.properties
           echo RELEASE_STORE_FILE='./key.jks' >> gradle.properties
           #echo ${{ secrets.RELEASE_KEY_STORE }} | base64 --decode > $GITHUB_WORKSPACE/app/key.jks
-          cp $GITHUB_WORKSPACE/.github/workflows/legado.jks $GITHUB_WORKSPACE/app/legado.jks
+          cp $GITHUB_WORKSPACE/.github/workflows/legado.jks $GITHUB_WORKSPACE/app/key.jks
 
       - name: Unify Version Name
         run: |
@@ -102,7 +102,7 @@ jobs:
       
     
       - name: Push Assets To "release" Branch
-        if: ${{ github.actor == 'gedoor' }}
+        if: ${{ github.actor == 'cyh92' }}
         run: |
           cd $GITHUB_WORKSPACE/apk/
           git init
@@ -115,7 +115,7 @@ jobs:
           git push -f -u origin release
           
       - name: Purge Jsdelivr Cache
-        if: ${{ github.actor == 'gedoor' }}
+        if: ${{ github.actor == 'cyh92' }}
         run: |
           result=$(curl -s https://purge.jsdelivr.net/gh/${{ github.actor }}/release@release/)
           if echo $result |grep -q 'success.*true'; then
