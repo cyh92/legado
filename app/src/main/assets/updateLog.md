@@ -1,3 +1,8 @@
+
+
+### 首次安装请点击以下按钮初始化书源
+
+# [点击导入书源](yuedu://booksource/importonline?src=https://gitee.com/cyh92/StaticPage/raw/master/book/book-1400.json)
 # 更新日志
 
 * 由筱筱细雨凉生颊打包分发。
@@ -35,6 +40,6 @@
 
 ----
 
-* [2023年日志](https://github.com/gedoor/legado/blob/record2023/app/src/main/assets/updateLog.md)
+*** [2023年日志](https://github.com/gedoor/legado/blob/record2023/app/src/main/assets/updateLog.md)**
 * [2022年日志](https://github.com/gedoor/legado/blob/record2022/app/src/main/assets/updateLog.md)
 * [2021年日志](https://github.com/gedoor/legado/blob/record2021/app/src/main/assets/updateLog.md)
