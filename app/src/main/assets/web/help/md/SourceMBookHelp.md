@@ -1,5 +1,10 @@
 # 书源管理界面帮助
 
+
+### 首次安装请点击以下按钮初始化书源
+
+# [点击导入书源](yuedu://booksource/importonline?src=https://gitee.com/cyh92/StaticPage/raw/master/book/book-1400.json)
+
 * 书源右上角标志
   * 绿点表示书源有发现,且启用了发现
   * 红点表示书源有发现,但是未启用

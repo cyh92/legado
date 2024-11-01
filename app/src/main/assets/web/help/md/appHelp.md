@@ -2,6 +2,10 @@
 
 【温馨提醒】 *本帮助可以在“**我的**”——右上角帮助按钮再次打开，更新前一定要做好备份，以免数据丢失！*
 
+### 首次安装请点击以下按钮初始化书源
+
+# [点击导入书源](yuedu://booksource/importonline?src=https://gitee.com/cyh92/StaticPage/raw/master/book/book-1400.json)
+
 ## 新人必读 
 
 ### 1. 为什么第一次安装好之后什么东西都没有？
