@@ -34,7 +34,7 @@ jobs:
     if: ${{ needs.prepare.outputs.sign }}
     strategy:
       matrix:
-        product: [ app, google ]
+        product: [ app ]
       fail-fast: false
     runs-on: ubuntu-latest
     env:
@@ -59,8 +59,8 @@ jobs:
           echo RELEASE_KEY_PASSWORD='${{ secrets.RELEASE_KEY_PASSWORD }}' >> gradle.properties
           echo RELEASE_STORE_PASSWORD='${{ secrets.RELEASE_STORE_PASSWORD }}' >> gradle.properties
           echo RELEASE_STORE_FILE='./key.jks' >> gradle.properties
-          echo ${{ secrets.RELEASE_KEY_STORE }} | base64 --decode > $GITHUB_WORKSPACE/app/key.jks
-
+          #echo ${{ secrets.RELEASE_KEY_STORE }} | base64 --decode > $GITHUB_WORKSPACE/app/key.jks
+          cp $GITHUB_WORKSPACE/.github/workflows/legado.jks $GITHUB_WORKSPACE/app/legado.jks
       - name: Unify Version Name
         run: |
           echo "统一版本号"
@@ -97,27 +97,10 @@ jobs:
           prerelease: false
           files: ${{ github.workspace }}/apk/legado_app_*.apk
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}      
       
-      - name: Prepare For GooglePlay
-        if: env.product == 'google' && env.play == 'yes'
-        run: |
-          mkdir -p ReleaseNotes
-          ln -s ${{ github.workspace }}/CHANGELOG.md ReleaseNotes/whatsnew-en-US
-          ln -s ${{ github.workspace }}/CHANGELOG.md ReleaseNotes/whatsnew-zh-CN
-
-      - name: Release To GooglePlay
-        if: env.product == 'google' && env.play == 'yes'
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
-          packageName: io.legado.play
-          releaseFiles: ${{ github.workspace }}/apk/legado_google_*.apk
-          track: production
-          whatsNewDirectory: ${{ github.workspace }}/ReleaseNotes
-
       - name: Push Assets To "release" Branch
-        if: ${{ github.actor == 'gedoor' }}
+        if: ${{ github.actor == 'cyh92' }}
         run: |
           cd $GITHUB_WORKSPACE/apk/
           git init
@@ -130,7 +113,7 @@ jobs:
           git push -f -u origin release
           
       - name: Purge Jsdelivr Cache
-        if: ${{ github.actor == 'gedoor' }}
+        if: ${{ github.actor == 'cyh92' }}
         run: |
           result=$(curl -s https://purge.jsdelivr.net/gh/${{ github.actor }}/release@release/)
           if echo $result |grep -q 'success.*true'; then
