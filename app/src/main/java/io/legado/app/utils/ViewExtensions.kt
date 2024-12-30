@@ -23,6 +23,7 @@ import android.widget.RadioGroup
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.annotation.ColorInt
+import androidx.annotation.DrawableRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.menu.MenuPopupHelper
 import androidx.appcompat.widget.PopupMenu
@@ -272,8 +273,17 @@ fun View.applyStatusBarPadding(withInitialPadding: Boolean = false) {
 fun View.applyNavigationBarPadding(withInitialPadding: Boolean = false) {
     val initialPadding = if (withInitialPadding) bottomPadding else 0
     ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
-        val insets = windowInsets.getInsets(WindowInsetsCompat.Type.navigationBars())
+        val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
         bottomPadding = initialPadding + insets.bottom
         windowInsets
     }
+}
+
+fun View.setBackgroundKeepPadding(@DrawableRes backgroundResId: Int) {
+    val paddingLeft = paddingLeft
+    val paddingTop = paddingTop
+    val paddingRight = paddingRight
+    val paddingBottom = paddingBottom
+    setBackgroundResource(backgroundResId)
+    setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom)
 }

@@ -290,7 +290,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var elevation: Int
-        get() = appCtx.getPrefInt(PreferKey.barElevation, AppConst.sysElevation)
+        get() = if (isEInkMode) 0 else appCtx.getPrefInt(
+            PreferKey.barElevation,
+            AppConst.sysElevation
+        )
         set(value) {
             appCtx.putPrefInt(PreferKey.barElevation, value)
         }
@@ -378,6 +381,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.tocUiUseReplace, value)
         }
 
+    var tocCountWords: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.tocCountWords, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.tocCountWords, value)
+        }
+
     var enableReadRecord: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.enableReadRecord, true)
         set(value) {
@@ -450,6 +459,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     val syncBookProgress get() = appCtx.getPrefBoolean(PreferKey.syncBookProgress, true)
+
+    val syncBookProgressPlus get() = appCtx.getPrefBoolean(PreferKey.syncBookProgressPlus, false)
 
     val mediaButtonOnExit get() = appCtx.getPrefBoolean("mediaButtonOnExit", true)
 

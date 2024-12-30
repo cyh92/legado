@@ -23,11 +23,17 @@ interface RssArticleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg rssArticle: RssArticle)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun append(vararg rssArticle: RssArticle)
+
     @Query("delete from rssArticles where origin = :origin and sort = :sort and `order` < :order")
     fun clearOld(origin: String, sort: String, order: Long)
 
     @Update
     fun update(vararg rssArticle: RssArticle)
+
+    @Query("update rssArticles set origin = :origin where origin = :oldOrigin")
+    fun updateOrigin(origin: String, oldOrigin: String)
 
     @Query("delete from rssArticles where origin = :origin")
     fun delete(origin: String)
@@ -35,5 +41,10 @@ interface RssArticleDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertRecord(vararg rssReadRecord: RssReadRecord)
 
+    @get:Query("select count(1) from rssReadRecords")
+    val countRead: Int
+
+    @Query("delete from rssReadRecords")
+    fun deleteRecord()
 
 }
