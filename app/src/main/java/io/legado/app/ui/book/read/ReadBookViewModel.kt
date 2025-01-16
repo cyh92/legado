@@ -67,6 +67,15 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         AppConfig.detectClickArea()
     }
 
+    fun initReadBookConfig(intent: Intent) {
+        val bookUrl = intent.getStringExtra("bookUrl")
+        val book = when {
+            bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadBook
+            else -> appDb.bookDao.getBook(bookUrl)
+        } ?: return
+        ReadBook.upReadBookConfig(book)
+    }
+
     /**
      * 初始化
      */
@@ -113,9 +122,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             return
         }
         ReadBook.upMsg(null)
-        if (ReadBook.simulatedChapterSize > 0 && ReadBook.durChapterIndex > ReadBook.simulatedChapterSize - 1) {
-            ReadBook.durChapterIndex = ReadBook.simulatedChapterSize - 1
-        }
+        ensureChapterExist()
         if (!isSameBook) {
             ReadBook.loadContent(resetPageOffset = true)
         } else {
@@ -125,7 +132,11 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             // 有章节跳转不同步阅读进度
             ReadBook.chapterChanged = false
         } else if (!isSameBook || !BaseReadAloudService.isRun) {
-            syncBookProgress(book)
+            if (AppConfig.syncBookProgressPlus) {
+                ReadBook.syncProgress({ progress -> ReadBook.callBack?.sureNewProgress(progress) })
+            } else {
+                syncBookProgress(book)
+            }
         }
         if (!book.isLocal && ReadBook.bookSource == null) {
             autoChangeSource(book.name, book.author)
@@ -143,6 +154,12 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
                 permissionDenialLiveData.postValue(0)
             }
             return false
+        }
+    }
+
+    private fun ensureChapterExist() {
+        if (ReadBook.simulatedChapterSize > 0 && ReadBook.durChapterIndex > ReadBook.simulatedChapterSize - 1) {
+            ReadBook.durChapterIndex = ReadBook.simulatedChapterSize - 1
         }
     }
 
@@ -166,6 +183,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     fun loadChapterList(book: Book) {
         execute {
             if (loadChapterListAwait(book)) {
+                ensureChapterExist()
                 ReadBook.upMsg(null)
                 ReadBook.loadContent(resetPageOffset = true)
             }

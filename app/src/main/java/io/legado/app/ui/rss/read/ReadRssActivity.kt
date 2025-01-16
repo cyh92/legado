@@ -49,6 +49,7 @@ import io.legado.app.utils.get
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.isTrue
+import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.setDarkeningAllowed
@@ -59,6 +60,7 @@ import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.textArray
 import io.legado.app.utils.toastOnUi
+import io.legado.app.utils.toggleNavigationBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.launch
@@ -183,9 +185,15 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         return super.onCompatOptionsItemSelected(item)
     }
 
-    override fun updateFavorite(title: String, group: String) {
-        viewModel.rssArticle?.title = title
-        viewModel.rssArticle?.group = group
+    override fun updateFavorite(title: String?, group: String?) {
+        viewModel.rssArticle?.let{
+            if (title != null) {
+                it.title = title
+            }
+            if (group != null) {
+                it.group = group
+            }
+        }
         viewModel.updateFavorite()
     }
 
@@ -200,7 +208,7 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
     private fun initView() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
-            val typeMask = WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.ime()
+            val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
             val insets = windowInsets.getInsets(typeMask)
             binding.root.bottomPadding = insets.bottom
             windowInsets
@@ -372,12 +380,16 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
             binding.llView.invisible()
             binding.customWebView.addView(view)
             customWebViewCallback = callback
+            keepScreenOn(true)
+            toggleNavigationBar(false)
         }
 
         override fun onHideCustomView() {
             binding.customWebView.removeAllViews()
             binding.llView.visible()
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            keepScreenOn(false)
+            toggleNavigationBar(true)
         }
     }
 
