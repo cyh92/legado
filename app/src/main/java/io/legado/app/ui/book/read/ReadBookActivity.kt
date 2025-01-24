@@ -48,6 +48,7 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalTxt
 import io.legado.app.help.book.isMobi
 import io.legado.app.help.book.removeType
+import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
@@ -127,7 +128,6 @@ import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -255,11 +255,6 @@ class ReadBookActivity : BaseReadBookActivity(),
     private var justInitData: Boolean = false
     private var syncDialog: AlertDialog? = null
 
-    override fun onStart() {
-        viewModel.initBookType(intent) { upStyle() }
-        super.onStart()
-    }
-
     @SuppressLint("ClickableViewAccessibility")
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         super.onActivityCreated(savedInstanceState)
@@ -299,6 +294,7 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
+        viewModel.initReadBookConfig(intent)
         Looper.myQueue().addIdleHandler {
             viewModel.initData(intent)
             false
@@ -404,14 +400,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         menu.findItem(R.id.menu_same_title_removed)?.isChecked =
             ReadBook.curTextChapter?.sameTitleRemoved == true
         return super.onMenuOpened(featureId, menu)
-    }
-
-    private fun upStyle() {
-        val oldIndex = ReadBookConfig.styleSelect
-        ReadBookConfig.styleSelect = ReadBookConfig.initSelectStyle()
-        if (oldIndex != ReadBookConfig.styleSelect){
-            postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
-        }
     }
 
     /**
@@ -576,12 +564,20 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_set_charset -> showCharsetConfig()
             R.id.menu_image_style -> {
                 val imgStyles =
-                    arrayListOf(Book.imgStyleDefault, Book.imgStyleFull, Book.imgStyleText, Book.imgStyleSingle)
+                    arrayListOf(
+                        Book.imgStyleDefault, Book.imgStyleFull, Book.imgStyleText,
+                        Book.imgStyleSingle
+                    )
                 selector(
                     R.string.image_style,
                     imgStyles
                 ) { _, index ->
-                    ReadBook.book?.setImageStyle(imgStyles[index])
+                    val imageStyle = imgStyles[index]
+                    ReadBook.book?.setImageStyle(imageStyle)
+                    if (imageStyle == Book.imgStyleSingle) {
+                        ReadBook.book?.setPageAnim(0)  // 切换图片样式single后，自动切换为覆盖
+                        binding.readView.upPageAnim()
+                    }
                     ReadBook.loadContent(false)
                 }
             }
