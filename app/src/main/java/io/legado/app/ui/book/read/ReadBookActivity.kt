@@ -1,7 +1,6 @@
 package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
@@ -169,14 +168,12 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     private val replaceActivity =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            it ?: return@registerForActivityResult
             if (it.resultCode == RESULT_OK) {
                 viewModel.replaceRuleChanged()
             }
         }
     private val searchContentActivity =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            it ?: return@registerForActivityResult
             it.data?.let { data ->
                 val key = data.getLongExtra("key", System.currentTimeMillis())
                 val index = data.getIntExtra("index", 0)
@@ -189,7 +186,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                     viewModel.searchResultIndex = index
                     binding.searchMenu.updateSearchResultIndex(index)
                     binding.searchMenu.selectedSearchResult?.let { currentResult ->
-                        ReadBook.saveCurrentBookProcess() //退出全文搜索恢复此时进度
+                        ReadBook.saveCurrentBookProgress() //退出全文搜索恢复此时进度
                         skipToSearch(currentResult)
                         showActionMenu()
                     }
@@ -232,7 +229,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     override val pageFactory get() = binding.readView.pageFactory
     override val pageDelegate get() = binding.readView.pageDelegate
     override val headerHeight: Int get() = binding.readView.curPage.headerHeight
-    private val menuLayoutIsVisible get() = bottomDialog > 0 || binding.readMenu.isVisible
+    private val menuLayoutIsVisible get() = bottomDialog > 0 || binding.readMenu.isVisible || binding.searchMenu.bottomMenuVisible
     private val nextPageDebounce by lazy { Debounce { keyPage(PageDirection.NEXT) } }
     private val prevPageDebounce by lazy { Debounce { keyPage(PageDirection.PREV) } }
     private var bookChanged = false
@@ -272,7 +269,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                 return@addCallback
             }
             //拦截返回供恢复阅读进度
-            if (ReadBook.lastBookPress != null && confirmRestoreProcess != false) {
+            if (ReadBook.lastBookProgress != null && confirmRestoreProcess != false) {
                 restoreLastBookProcess()
                 return@addCallback
             }
@@ -312,6 +309,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         upSystemUiVisibility()
         if (hasFocus) {
             binding.readMenu.upBrightnessState()
+        } else if (!menuLayoutIsVisible) {
+            ReadBook.cancelPreDownloadTask()
         }
     }
 
@@ -319,6 +318,12 @@ class ReadBookActivity : BaseReadBookActivity(),
         super.onConfigurationChanged(newConfig)
         upSystemUiVisibility()
         binding.readView.upStatusBar()
+    }
+
+    override fun onTopResumedActivityChanged(isTopResumedActivity: Boolean) {
+        if (!isTopResumedActivity) {
+            ReadBook.cancelPreDownloadTask()
+        }
     }
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
@@ -356,6 +361,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         autoPageStop()
         backupJob?.cancel()
         ReadBook.saveRead()
+        ReadBook.cancelPreDownloadTask()
         unregisterReceiver(timeBatteryReceiver)
         upSystemUiVisibility()
         if (!BuildConfig.DEBUG) {
@@ -419,10 +425,10 @@ class ReadBookActivity : BaseReadBookActivity(),
                 else -> when (item.itemId) {
                     R.id.menu_enable_replace -> item.isChecked = book.getUseReplaceRule()
                     R.id.menu_re_segment -> item.isChecked = book.getReSegment()
-                    R.id.menu_enable_review -> {
-                        item.isVisible = BuildConfig.DEBUG
-                        item.isChecked = AppConfig.enableReview
-                    }
+//                    R.id.menu_enable_review -> {
+//                        item.isVisible = BuildConfig.DEBUG
+//                        item.isChecked = AppConfig.enableReview
+//                    }
 
                     R.id.menu_reverse_content -> item.isVisible = onLine
                     R.id.menu_del_ruby_tag -> item.isChecked = book.getDelTag(Book.rubyTag)
@@ -521,11 +527,11 @@ class ReadBookActivity : BaseReadBookActivity(),
                 ReadBook.loadContent(false)
             }
 
-            R.id.menu_enable_review -> {
-                AppConfig.enableReview = !AppConfig.enableReview
-                item.isChecked = AppConfig.enableReview
-                ReadBook.loadContent(false)
-            }
+//            R.id.menu_enable_review -> {
+//                AppConfig.enableReview = !AppConfig.enableReview
+//                item.isChecked = AppConfig.enableReview
+//                ReadBook.loadContent(false)
+//            }
 
             R.id.menu_del_ruby_tag -> ReadBook.book?.let {
                 item.isChecked = !item.isChecked
@@ -1233,20 +1239,20 @@ class ReadBookActivity : BaseReadBookActivity(),
     /* 恢复到 全文搜索/进度条跳转前的位置 */
     private fun restoreLastBookProcess() {
         if (confirmRestoreProcess == true) {
-            ReadBook.restoreLastBookProcess()
+            ReadBook.restoreLastBookProgress()
         } else if (confirmRestoreProcess == null) {
             alert(R.string.draw) {
                 setMessage(R.string.restore_last_book_process)
                 yesButton {
                     confirmRestoreProcess = true
-                    ReadBook.restoreLastBookProcess() //恢复启动全文搜索前的进度
+                    ReadBook.restoreLastBookProgress() //恢复启动全文搜索前的进度
                 }
                 noButton {
-                    ReadBook.lastBookPress = null
+                    ReadBook.lastBookProgress = null
                     confirmRestoreProcess = false
                 }
                 onCancelled {
-                    ReadBook.lastBookPress = null
+                    ReadBook.lastBookProgress = null
                     confirmRestoreProcess = false
                 }
             }
@@ -1284,7 +1290,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                     analyzeRule.setBaseUrl(chapter.url)
                     analyzeRule.chapter = chapter
                     analyzeRule.evalJS(payAction).toString()
-                }.onSuccess {
+                }.onSuccess(IO) {
                     if (it.isAbsUrl()) {
                         startActivity<WebViewActivity> {
                             putExtra("title", getString(R.string.chapter_pay))
@@ -1445,7 +1451,7 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     /* 进度条跳转到指定章节 */
     override fun skipToChapter(index: Int) {
-        ReadBook.saveCurrentBookProcess() //退出章节跳转恢复此时进度
+        ReadBook.saveCurrentBookProgress() //退出章节跳转恢复此时进度
         viewModel.openChapter(index)
     }
 
@@ -1569,7 +1575,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                     ReadBook.book?.removeType(BookType.notShelf)
                     ReadBook.book?.save()
                     ReadBook.inBookshelf = true
-                    setResult(Activity.RESULT_OK)
+                    setResult(RESULT_OK)
                 }
                 noButton { viewModel.removeFromBookshelf { super.finish() } }
             }

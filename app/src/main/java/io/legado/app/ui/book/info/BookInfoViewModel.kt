@@ -26,12 +26,13 @@ import io.legado.app.help.book.isNotShelf
 import io.legado.app.help.book.isSameNameAuthor
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeType
-import io.legado.app.help.book.simulatedTotalChapterNum
+import io.legado.app.help.book.updateTo
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.webdav.ObjectNotFoundException
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadBook
+import io.legado.app.model.ReadManga
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
@@ -180,10 +181,10 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             WebBook.getBookInfo(scope, bookSource, book, canReName = canReName)
                 .onSuccess(IO) {
                     val dbBook = appDb.bookDao.getBook(book.name, book.author)
-                    if (dbBook != null && !dbBook.isNotShelf && dbBook.origin == book.origin) {
+                    if (!inBookshelf && dbBook != null && !dbBook.isNotShelf && dbBook.origin == book.origin) {
                         /**
-                         * book 来自搜索时，搜索的书名不存在于书架，但是加载详情后，书名更新，存在同名书籍
-                         * 此时 book 的数据会与数据库中的不同，需要更新 #3652
+                         * book 来自搜索时(inBookshelf == false)，搜索的书名不存在于书架，但是加载详情后，书名更新，存在同名书籍
+                         * 此时 book 的数据会与数据库中的不同，需要更新 #3652 #4619
                          * book 加载详情后虽然书名作者相同，但是又可能不是数据库中(书源不同)的那本书 #3149
                          */
                         dbBook.updateTo(it)
@@ -191,8 +192,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     }
                     bookData.postValue(it)
                     if (inBookshelf) {
-                        val dbBook1 = appDb.bookDao.getBook(it.bookUrl)
-                        if (dbBook1 == null) {
+                        if (!appDb.bookDao.has(it.bookUrl)) {
                             /**
                              * 来自搜索，同一本书，不同 bookUrl
                              */
@@ -226,6 +226,8 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     appDb.bookDao.update(book)
                     appDb.bookChapterDao.delByBook(book.bookUrl)
                     appDb.bookChapterDao.insert(*it.toTypedArray())
+                    ReadBook.onChapterListUpdated(book)
+                    bookData.postValue(book)
                     chapterListData.postValue(it)
                 }
             }.onError {
@@ -252,11 +254,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                         }
                         appDb.bookChapterDao.delByBook(oldBook.bookUrl)
                         appDb.bookChapterDao.insert(*it.toTypedArray())
-                        if (book.isSameNameAuthor(ReadBook.book)) {
-                            ReadBook.book = book
-                            ReadBook.chapterSize = book.totalChapterNum
-                            ReadBook.simulatedChapterSize = book.simulatedTotalChapterNum()
-                        }
+                        ReadBook.onChapterListUpdated(book)
                     }
                     bookData.postValue(book)
                     chapterListData.postValue(it)
@@ -485,6 +483,9 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             BookHelp.clearCache(bookData.value!!)
             if (ReadBook.book?.bookUrl == bookData.value!!.bookUrl) {
                 ReadBook.clearTextChapter()
+            }
+            if (ReadManga.book?.bookUrl == bookData.value!!.bookUrl) {
+                ReadManga.clearMangaChapter()
             }
         }.onSuccess {
             context.toastOnUi(R.string.clear_cache_success)

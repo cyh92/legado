@@ -4,13 +4,10 @@ import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.net.http.SslError
-import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
@@ -30,6 +27,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.lib.dialogs.SelectItem
+import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.Download
 import io.legado.app.ui.association.OnLineImportActivity
@@ -43,7 +41,7 @@ import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setDarkeningAllowed
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.toggleNavigationBar
+import io.legado.app.utils.toggleSystemBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import java.net.URLDecoder
@@ -102,6 +100,14 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         return super.onCompatCreateOptionsMenu(menu)
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        if (viewModel.sourceOrigin.isNotEmpty()) {
+            menu.findItem(R.id.menu_disable_source)?.isVisible = true
+            menu.findItem(R.id.menu_delete_source)?.isVisible = true
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_open_in_browser -> openUrl(viewModel.baseUrl)
@@ -117,6 +123,23 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             }
 
             R.id.menu_full_screen -> toggleFullScreen()
+            R.id.menu_disable_source -> {
+                viewModel.disableSource {
+                    finish()
+                }
+            }
+
+            R.id.menu_delete_source -> {
+                alert(R.string.draw) {
+                    setMessage(getString(R.string.sure_del) + "\n" + viewModel.sourceName)
+                    noButton()
+                    yesButton {
+                        viewModel.deleteSource {
+                            finish()
+                        }
+                    }
+                }
+            }
         }
         return super.onCompatOptionsItemSelected(item)
     }
@@ -125,31 +148,12 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private fun toggleFullScreen() {
         isFullScreen = !isFullScreen
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // For API 30 and above
-            val windowInsetsController = window.insetsController
-            windowInsetsController?.let {
-                if (isFullScreen) {
-                    it.systemBarsBehavior =
-                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    it.hide(WindowInsets.Type.systemBars())
-                    supportActionBar?.hide()
-                } else {
-                    it.show(WindowInsets.Type.systemBars())
-                    supportActionBar?.show()
-                }
-            }
+        toggleSystemBar(!isFullScreen)
+
+        if (isFullScreen) {
+            supportActionBar?.hide()
         } else {
-            // For older APIs
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = if (isFullScreen) {
-                (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        or View.SYSTEM_UI_FLAG_FULLSCREEN
-                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
-            } else {
-                View.SYSTEM_UI_FLAG_VISIBLE
-            }
-            supportActionBar?.let { if (isFullScreen) it.hide() else it.show() }
+            supportActionBar?.show()
         }
     }
 
@@ -240,7 +244,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             binding.customWebView.addView(view)
             customWebViewCallback = callback
             keepScreenOn(true)
-            toggleNavigationBar(false)
+            toggleSystemBar(false)
         }
 
         override fun onHideCustomView() {
@@ -248,7 +252,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             binding.llView.visible()
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
-            toggleNavigationBar(true)
+            toggleSystemBar(true)
         }
     }
 

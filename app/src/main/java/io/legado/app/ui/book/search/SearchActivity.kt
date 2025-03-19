@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
+import kotlin.math.abs
 
 class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel>(),
     BookAdapter.CallBack,
@@ -191,7 +192,8 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             }
 
             override fun onQueryTextChange(newText: String): Boolean {
-                if (newText.isBlank()) viewModel.stop()
+                viewModel.stop()
+                binding.fbStartStop.invisible()
                 upHistory(newText.trim())
                 return false
             }
@@ -239,22 +241,39 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
                 if (!recyclerView.canScrollVertically(1)) {
-                    scrollToBottom()
+                    val layoutManager = recyclerView.layoutManager as LinearLayoutManager
+                    val lastPosition = layoutManager.findLastCompletelyVisibleItemPosition()
+                    if (lastPosition == RecyclerView.NO_POSITION) {
+                        return
+                    }
+                    val lastView = layoutManager.findViewByPosition(lastPosition)
+                    if (lastView == null) {
+                        scrollToBottom()
+                        return
+                    }
+                    val bottom = abs(lastView.bottom - recyclerView.height)
+                    if (bottom <= 1) {
+                        scrollToBottom()
+                    }
                 }
             }
         })
     }
 
     private fun initOtherView() {
-        binding.fbStop.backgroundTintList =
+        binding.fbStartStop.backgroundTintList =
             Selector.colorBuild()
                 .setDefaultColor(accentColor)
                 .setPressedColor(ColorUtils.darkenColor(accentColor))
                 .create()
-        binding.fbStop.setOnClickListener {
-            isManualStopSearch = true
-            viewModel.stop()
-            binding.refreshProgressBar.isAutoLoading = false
+        binding.fbStartStop.setOnClickListener {
+            if (viewModel.isSearchLiveData.value == true) {
+                isManualStopSearch = true
+                viewModel.stop()
+                binding.refreshProgressBar.isAutoLoading = false
+            } else {
+                viewModel.search("")
+            }
         }
         binding.tvClearHistory.setOnClickListener { alertClearHistory() }
     }
@@ -374,7 +393,8 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     private fun startSearch() {
         binding.refreshProgressBar.visible()
         binding.refreshProgressBar.isAutoLoading = true
-        binding.fbStop.visible()
+        binding.fbStartStop.setImageResource(R.drawable.ic_stop_black_24dp)
+        binding.fbStartStop.visible()
     }
 
     /**
@@ -383,7 +403,11 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     private fun searchFinally() {
         binding.refreshProgressBar.isAutoLoading = false
         binding.refreshProgressBar.gone()
-        binding.fbStop.invisible()
+        if (!isManualStopSearch && viewModel.hasMore) {
+            binding.fbStartStop.setImageResource(R.drawable.ic_play_24dp)
+        } else {
+            binding.fbStartStop.invisible()
+        }
     }
 
     override fun observeLiveBus() {
