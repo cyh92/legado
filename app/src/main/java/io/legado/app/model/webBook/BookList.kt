@@ -10,6 +10,7 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.source.getBookType
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.utils.HtmlFormatter
@@ -32,7 +33,9 @@ object BookList {
         baseUrl: String,
         body: String?,
         isSearch: Boolean = true,
-        isRedirect: Boolean = false
+        isRedirect: Boolean = false,
+        filter: ((name: String, author: String) -> Boolean)? = null,
+        shouldBreak: ((size: Int) -> Boolean)? = null
     ): ArrayList<SearchBook> {
         body ?: throw NoStackTraceException(
             appCtx.getString(
@@ -58,7 +61,8 @@ object BookList {
                     body,
                     baseUrl,
                     ruleData.getVariable(),
-                    isRedirect
+                    isRedirect,
+                    filter
                 )?.let { searchBook ->
                     searchBook.infoHtml = body
                     bookList.add(searchBook)
@@ -88,7 +92,7 @@ object BookList {
             Debug.log(bookSource.bookSourceUrl, "└列表为空,按详情页解析")
             getInfoItem(
                 bookSource, analyzeRule, analyzeUrl, body, baseUrl, ruleData.getVariable(),
-                isRedirect
+                isRedirect, filter
             )?.let { searchBook ->
                 searchBook.infoHtml = body
                 bookList.add(searchBook)
@@ -107,6 +111,7 @@ object BookList {
                 getSearchItem(
                     bookSource, analyzeRule, item, baseUrl, ruleData.getVariable(),
                     index == 0,
+                    filter,
                     ruleName = ruleName,
                     ruleBookUrl = ruleBookUrl,
                     ruleAuthor = ruleAuthor,
@@ -120,6 +125,9 @@ object BookList {
                         searchBook.infoHtml = body
                     }
                     bookList.add(searchBook)
+                }
+                if (shouldBreak?.invoke(bookList.size) == true) {
+                    break
                 }
             }
             val lh = LinkedHashSet(bookList)
@@ -141,7 +149,8 @@ object BookList {
         body: String,
         baseUrl: String,
         variable: String?,
-        isRedirect: Boolean
+        isRedirect: Boolean,
+        filter: ((name: String, author: String) -> Boolean)?
     ): SearchBook? {
         val book = Book(variable = variable)
         book.bookUrl = if (isRedirect) {
@@ -163,6 +172,9 @@ object BookList {
             baseUrl,
             false
         )
+        if (filter?.invoke(book.name, book.author) == false) {
+            return null
+        }
         if (book.name.isNotBlank()) {
             return book.toSearchBook()
         }
@@ -177,6 +189,7 @@ object BookList {
         baseUrl: String,
         variable: String?,
         log: Boolean,
+        filter: ((name: String, author: String) -> Boolean)?,
         ruleName: List<AnalyzeRule.SourceRule>,
         ruleBookUrl: List<AnalyzeRule.SourceRule>,
         ruleAuthor: List<AnalyzeRule.SourceRule>,
@@ -202,12 +215,16 @@ object BookList {
             Debug.log(bookSource.bookSourceUrl, "┌获取作者", log)
             searchBook.author = BookHelp.formatBookAuthor(analyzeRule.getString(ruleAuthor))
             Debug.log(bookSource.bookSourceUrl, "└${searchBook.author}", log)
+            if (filter?.invoke(searchBook.name, searchBook.author) == false) {
+                return null
+            }
             coroutineContext.ensureActive()
             Debug.log(bookSource.bookSourceUrl, "┌获取分类", log)
             try {
                 searchBook.kind = analyzeRule.getStringList(ruleKind)?.joinToString(",")
                 Debug.log(bookSource.bookSourceUrl, "└${searchBook.kind ?: ""}", log)
             } catch (e: Exception) {
+                coroutineContext.ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
             }
             coroutineContext.ensureActive()
@@ -215,7 +232,8 @@ object BookList {
             try {
                 searchBook.wordCount = wordCountFormat(analyzeRule.getString(ruleWordCount))
                 Debug.log(bookSource.bookSourceUrl, "└${searchBook.wordCount}", log)
-            } catch (e: java.lang.Exception) {
+            } catch (e: Exception) {
+                coroutineContext.ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
             }
             coroutineContext.ensureActive()
@@ -223,7 +241,8 @@ object BookList {
             try {
                 searchBook.latestChapterTitle = analyzeRule.getString(ruleLastChapter)
                 Debug.log(bookSource.bookSourceUrl, "└${searchBook.latestChapterTitle}", log)
-            } catch (e: java.lang.Exception) {
+            } catch (e: Exception) {
+                coroutineContext.ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
             }
             coroutineContext.ensureActive()
@@ -231,7 +250,8 @@ object BookList {
             try {
                 searchBook.intro = HtmlFormatter.format(analyzeRule.getString(ruleIntro))
                 Debug.log(bookSource.bookSourceUrl, "└${searchBook.intro}", log)
-            } catch (e: java.lang.Exception) {
+            } catch (e: Exception) {
+                coroutineContext.ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
             }
             coroutineContext.ensureActive()
@@ -243,7 +263,8 @@ object BookList {
                     }
                 }
                 Debug.log(bookSource.bookSourceUrl, "└${searchBook.coverUrl ?: ""}", log)
-            } catch (e: java.lang.Exception) {
+            } catch (e: Exception) {
+                coroutineContext.ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
             }
             coroutineContext.ensureActive()

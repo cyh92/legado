@@ -1,5 +1,6 @@
 package io.legado.app.help.source
 
+import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 import io.legado.app.data.entities.BookSource
@@ -61,7 +62,9 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
                         } else {
                             exploreUrl.substring(4, exploreUrl.lastIndexOf("<"))
                         }
-                        ruleStr = evalJS(jsStr).toString().trim()
+                        ruleStr = runScriptWithContext {
+                            evalJS(jsStr).toString().trim()
+                        }
                         aCache.put(exploreKindsKey, ruleStr)
                     }
                 }
@@ -86,6 +89,14 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
 }
 
 suspend fun BookSourcePart.clearExploreKindsCache() {
+    withContext(Dispatchers.IO) {
+        val exploreKindsKey = getExploreKindsKey()
+        aCache.remove(exploreKindsKey)
+        exploreKindsMap.remove(exploreKindsKey)
+    }
+}
+
+suspend fun BookSource.clearExploreKindsCache() {
     withContext(Dispatchers.IO) {
         val exploreKindsKey = getExploreKindsKey()
         aCache.remove(exploreKindsKey)

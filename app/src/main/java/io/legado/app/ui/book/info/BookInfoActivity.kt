@@ -143,7 +143,6 @@ class BookInfoActivity :
             viewModel.refreshBook(book)
         }
     }
-    private var tocChanged = false
     private var chapterChanged = false
     private val waitDialog by lazy { WaitDialog(this) }
     private var editMenuItem: MenuItem? = null
@@ -256,7 +255,6 @@ class BookInfoActivity :
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             R.id.menu_split_long_chapter -> {
                 upLoading(true)
-                tocChanged = true
                 viewModel.getBook()?.let {
                     it.setSplitLongChapter(!item.isChecked)
                     viewModel.loadBookInfo(it, false)
@@ -352,10 +350,11 @@ class BookInfoActivity :
     }
 
     private fun showCover(book: Book) {
-        binding.ivCover.load(book.getDisplayCover(), book.name, book.author, false, book.origin)
-        if (!AppConfig.isEInkMode) {
-            BookCover.loadBlur(this, book.getDisplayCover())
-                .into(binding.bgBook)
+        binding.ivCover.load(book.getDisplayCover(), book.name, book.author, false, book.origin) {
+            if (!AppConfig.isEInkMode) {
+                BookCover.loadBlur(this, book.getDisplayCover(), false, book.origin)
+                    .into(binding.bgBook)
+            }
         }
     }
 
@@ -697,15 +696,14 @@ class BookInfoActivity :
             else -> readBookResult.launch(
                 Intent(
                     this,
-                    if (book.isImage&&AppConfig.showMangaUi) ReadMangaActivity::class.java else ReadBookActivity::class.java
+                    if (book.isImage && AppConfig.showMangaUi) ReadMangaActivity::class.java
+                    else ReadBookActivity::class.java
                 )
                     .putExtra("bookUrl", book.bookUrl)
                     .putExtra("inBookshelf", viewModel.inBookshelf)
-                    .putExtra("tocChanged", tocChanged)
                     .putExtra("chapterChanged", chapterChanged)
             )
         }
-        tocChanged = false
     }
 
     override val oldBook: Book?

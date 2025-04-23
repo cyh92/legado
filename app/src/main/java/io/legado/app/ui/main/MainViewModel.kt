@@ -58,6 +58,10 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         setMaxRecycledViews(0, 100)
     }
 
+    init {
+        deleteNotShelfBook()
+    }
+
     override fun onCleared() {
         super.onCleared()
         upTocPool.close()
@@ -152,9 +156,10 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         }
         kotlin.runCatching {
             val oldBook = book.copy()
-            WebBook.runPreUpdateJs(source, book)
             if (book.tocUrl.isBlank()) {
                 WebBook.getBookInfoAwait(source, book)
+            } else {
+                WebBook.runPreUpdateJs(source, book)
             }
             val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
             book.sync(oldBook)
@@ -246,7 +251,7 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun deleteNotShelfBook() {
+    private fun deleteNotShelfBook() {
         execute {
             appDb.bookDao.deleteNotShelfBook()
         }

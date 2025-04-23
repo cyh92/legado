@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onEmpty
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
+import splitties.init.appCtx
 
 class ReadMangaViewModel(application: Application) : BaseViewModel(application) {
 
@@ -42,7 +43,6 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
     fun initData(intent: Intent, success: (() -> Unit)? = null) {
         execute {
             ReadManga.inBookshelf = intent.getBooleanExtra("inBookshelf", true)
-            ReadManga.tocChanged = intent.getBooleanExtra("tocChanged", false)
             val bookUrl = intent.getStringExtra("bookUrl")
             val book = when {
                 bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadBook
@@ -112,7 +112,7 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
                 return true
             }.onFailure {
                 //加载章节出错
-                ReadManga.mCallback?.loadFail("加载目录失败")
+                ReadManga.mCallback?.loadFail(appCtx.getString(R.string.error_load_toc))
                 return false
             }
         }
@@ -153,7 +153,7 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
                 // 自动换源
 
             }.mapParallelSafe(AppConfig.threadCount) { source ->
-                val book = WebBook.preciseSearchAwait(this, source, name, author).getOrThrow()
+                val book = WebBook.preciseSearchAwait(source, name, author).getOrThrow()
                 if (book.tocUrl.isEmpty()) {
                     WebBook.getBookInfoAwait(source, book)
                 }

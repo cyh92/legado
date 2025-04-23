@@ -12,10 +12,11 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import io.legado.app.R
 import io.legado.app.databinding.ViewMangaMenuBinding
-import io.legado.app.help.IntentData
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.bottomBackground
+import io.legado.app.model.ReadBook
 import io.legado.app.model.ReadManga
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
@@ -176,9 +177,12 @@ class MangaMenu @JvmOverloads constructor(
             } else {
                 context.startActivity<WebViewActivity> {
                     val url = tvChapterUrl.text.toString()
+                    val bookSource = ReadBook.bookSource
                     putExtra("title", tvChapterName.text)
                     putExtra("url", url)
-                    IntentData.put(url, ReadManga.bookSource?.getHeaderMap(true))
+                    putExtra("sourceOrigin", bookSource?.bookSourceUrl)
+                    putExtra("sourceName", bookSource?.bookSourceName)
+                    putExtra("sourceType", bookSource?.getSourceType())
                 }
             }
         }
@@ -233,7 +237,7 @@ class MangaMenu @JvmOverloads constructor(
     interface CallBack {
         fun openBookInfoActivity()
         fun upSystemUiVisibility(menuIsVisible: Boolean)
-        fun skipToPage(pos: Int)
+        fun skipToPage(index: Int)
     }
 
 }

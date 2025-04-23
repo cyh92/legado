@@ -52,6 +52,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.source.getSourceType
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
@@ -60,13 +61,13 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.model.localBook.MobiFile
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.receiver.TimeBatteryReceiver
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.about.AppLogDialog
-import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.book.bookmark.BookmarkDialog
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.changesource.ChangeChapterSourceDialog
@@ -120,6 +121,7 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.sysScreenOffTime
 import io.legado.app.utils.throttle
 import io.legado.app.utils.toastOnUi
@@ -198,6 +200,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             if (it.resultCode == RESULT_OK) {
                 setResult(RESULT_DELETED)
                 super.finish()
+            } else {
+                ReadBook.loadOrUpContent()
             }
         }
     private val selectImageDir = registerForActivityResult(HandleFileContract()) {
@@ -1088,9 +1092,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                     ReadBook.book?.delete()
                     appDb.bookDao.insert(book)
                 }
-                startActivity<AudioPlayActivity> {
-                    putExtra("bookUrl", book.bookUrl)
-                }
+                startActivityForBook(book)
                 finish()
             }
         }
@@ -1279,7 +1281,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         alert(R.string.chapter_pay) {
             setMessage(chapter.title)
             yesButton {
-                Coroutine.async {
+                Coroutine.async(lifecycleScope) {
                     val source =
                         ReadBook.bookSource ?: throw NoStackTraceException("no book source")
                     val payAction = source.getContentRule().payAction
@@ -1287,15 +1289,19 @@ class ReadBookActivity : BaseReadBookActivity(),
                         throw NoStackTraceException("no pay action")
                     }
                     val analyzeRule = AnalyzeRule(book, source)
+                    analyzeRule.setCoroutineContext(coroutineContext)
                     analyzeRule.setBaseUrl(chapter.url)
                     analyzeRule.chapter = chapter
                     analyzeRule.evalJS(payAction).toString()
                 }.onSuccess(IO) {
                     if (it.isAbsUrl()) {
                         startActivity<WebViewActivity> {
+                            val bookSource = ReadBook.bookSource
                             putExtra("title", getString(R.string.chapter_pay))
                             putExtra("url", it)
-                            IntentData.put(it, ReadBook.bookSource?.getHeaderMap(true))
+                            putExtra("sourceOrigin", bookSource?.bookSourceUrl)
+                            putExtra("sourceName", bookSource?.bookSourceName)
+                            putExtra("sourceType", bookSource?.getSourceType())
                         }
                     } else if (it.isTrue()) {
                         //购买成功后刷新目录

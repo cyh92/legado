@@ -17,6 +17,8 @@
 
 > 不同的书源规则中支持的调用的Java类和方法可能有所不同
 
+> 注意使用 `const` 声明的变量不支持块级作用域，在循环里使用会出现值不变的问题，请改用 `var` 声明
+
 |变量名|调用类|
 |------|-----|
 |java|当前类|
@@ -112,8 +114,8 @@ java.getWebViewUA(): String
 * 网络请求
 ```js
 java.ajax(urlStr): String
-java.ajaxAll(urlList: Array<String>): Array<StrResponse?>
-//返回Response 方法body() code() message() header() raw() toString() 
+java.ajaxAll(urlList: Array<String>): Array<StrResponse>
+//返回StrResponse 方法body() code() message() headers() raw() toString() 
 java.connect(urlStr): StrResponse
 
 java.post(url: String, body: String, headerMap: Map<String, String>): Connection.Response

@@ -14,12 +14,13 @@ import io.legado.app.help.http.StrResponse
 import io.legado.app.help.source.getBookType
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlin.coroutines.CoroutineContext
@@ -49,6 +50,8 @@ object WebBook {
         bookSource: BookSource,
         key: String,
         page: Int? = 1,
+        filter: ((name: String, author: String) -> Boolean)? = null,
+        shouldBreak: ((size: Int) -> Boolean)? = null
     ): ArrayList<SearchBook> {
         val searchUrl = bookSource.searchUrl
         if (searchUrl.isNullOrBlank()) {
@@ -60,7 +63,6 @@ object WebBook {
             key = key,
             page = page,
             baseUrl = bookSource.bookSourceUrl,
-            headerMapF = bookSource.getHeaderMap(true),
             source = bookSource,
             ruleData = ruleData,
             coroutineContext = coroutineContext
@@ -80,7 +82,9 @@ object WebBook {
             baseUrl = res.url,
             body = res.body,
             isSearch = true,
-            isRedirect = res.raw.priorResponse?.isRedirect == true
+            isRedirect = res.raw.priorResponse?.isRedirect == true,
+            filter = filter,
+            shouldBreak = shouldBreak
         )
     }
 
@@ -111,7 +115,6 @@ object WebBook {
             baseUrl = bookSource.bookSourceUrl,
             source = bookSource,
             ruleData = ruleData,
-            headerMapF = bookSource.getHeaderMap(true),
             coroutineContext = coroutineContext
         )
         var res = analyzeUrl.getStrResponseAwait()
@@ -169,7 +172,6 @@ object WebBook {
                 baseUrl = bookSource.bookSourceUrl,
                 source = bookSource,
                 ruleData = book,
-                headerMapF = bookSource.getHeaderMap(true),
                 coroutineContext = coroutineContext
             )
             var res = analyzeUrl.getStrResponseAwait()
@@ -207,21 +209,16 @@ object WebBook {
         }
     }
 
-    suspend fun runPreUpdateJs(bookSource: BookSource, book: Book): Result<Boolean> {
+    suspend fun runPreUpdateJs(bookSource: BookSource, book: Book): Result<Unit> {
         return kotlin.runCatching {
             val preUpdateJs = bookSource.ruleToc?.preUpdateJs
             if (!preUpdateJs.isNullOrBlank()) {
-                kotlin.runCatching {
-                    AnalyzeRule(book, bookSource)
-                        .setCoroutineContext(coroutineContext)
-                        .evalJS(preUpdateJs)
-                }.onFailure {
-                    AppLog.put("执行preUpdateJs规则失败 书源:${bookSource.bookSourceName}", it)
-                    throw it
-                }
-                return@runCatching true
+                AnalyzeRule(book, bookSource)
+                    .setCoroutineContext(coroutineContext)
+                    .evalJS(preUpdateJs)
             }
-            return@runCatching false
+        }.onFailure {
+            AppLog.put("执行preUpdateJs规则失败 书源:${bookSource.bookSourceName}", it)
         }
     }
 
@@ -250,7 +247,6 @@ object WebBook {
                     baseUrl = book.bookUrl,
                     source = bookSource,
                     ruleData = book,
-                    headerMapF = bookSource.getHeaderMap(true),
                     coroutineContext = coroutineContext
                 )
                 var res = analyzeUrl.getStrResponseAwait()
@@ -329,7 +325,6 @@ object WebBook {
                 source = bookSource,
                 ruleData = book,
                 chapter = bookChapter,
-                headerMapF = bookSource.getHeaderMap(true),
                 coroutineContext = coroutineContext
             )
             var res = analyzeUrl.getStrResponseAwait(
@@ -369,7 +364,7 @@ object WebBook {
         return Coroutine.async(scope, context) {
             for (s in bookSourceParts) {
                 val source = s.getBookSource() ?: continue
-                val book = preciseSearchAwait(scope, source, name, author).getOrNull()
+                val book = preciseSearchAwait(source, name, author).getOrNull()
                 if (book != null) {
                     return@async Pair(book, source)
                 }
@@ -379,22 +374,19 @@ object WebBook {
     }
 
     suspend fun preciseSearchAwait(
-        scope: CoroutineScope,
         bookSource: BookSource,
         name: String,
         author: String,
     ): Result<Book> {
         return kotlin.runCatching {
-            scope.isActive
-            searchBookAwait(bookSource, name).firstOrNull {
-                it.name == name && it.author == author
-            }?.let { searchBook ->
-                scope.isActive
-                var book = searchBook.toBook()
-                if (book.tocUrl.isBlank()) {
-                    book = getBookInfoAwait(bookSource, book)
-                }
-                return@runCatching book
+            coroutineContext.ensureActive()
+            searchBookAwait(
+                bookSource, name,
+                filter = { fName, fAuthor -> fName == name && fAuthor == author },
+                shouldBreak = { it > 0 }
+            ).firstOrNull()?.let { searchBook ->
+                coroutineContext.ensureActive()
+                return@runCatching searchBook.toBook()
             }
             throw NoStackTraceException("未搜索到 $name($author) 书籍")
         }

@@ -4,10 +4,13 @@ import android.annotation.SuppressLint
 import android.util.Base64
 import androidx.annotation.Keep
 import androidx.media3.common.MediaItem
+import cn.hutool.core.codec.PercentCodec
+import cn.hutool.core.net.RFC3986
 import cn.hutool.core.util.HexUtil
 import com.bumptech.glide.load.model.GlideUrl
 import com.script.buildScriptBindings
 import com.script.rhino.RhinoScriptEngine
+import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppConst.UA_NAME
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.AppPattern.JS_PATTERN
@@ -35,6 +38,7 @@ import io.legado.app.help.http.newCallStrResponse
 import io.legado.app.help.http.postForm
 import io.legado.app.help.http.postJson
 import io.legado.app.help.http.postMultipart
+import io.legado.app.help.source.getShareScope
 import io.legado.app.utils.EncoderUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.NetworkUtils
@@ -45,7 +49,6 @@ import io.legado.app.utils.isJson
 import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.isJsonObject
 import io.legado.app.utils.isXml
-import io.legado.app.utils.splitNotBlank
 import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -54,6 +57,7 @@ import okhttp3.Response
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.net.URLEncoder
+import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import kotlin.coroutines.ContinuationInterceptor
@@ -74,18 +78,16 @@ class AnalyzeUrl(
     val page: Int? = null,
     val speakText: String? = null,
     val speakSpeed: Int? = null,
-    var baseUrl: String = "",
+    private var baseUrl: String = "",
     private val source: BaseSource? = null,
     private val ruleData: RuleDataInterface? = null,
     private val chapter: BookChapter? = null,
     private val readTimeout: Long? = null,
+    private val callTimeout: Long? = null,
     private var coroutineContext: CoroutineContext = EmptyCoroutineContext,
     headerMapF: Map<String, String>? = null,
+    hasLoginHeader: Boolean = true
 ) : JsExtensions {
-    companion object {
-        val paramPattern: Pattern = Pattern.compile("\\s*,\\s*(?=\\{)")
-        private val pagePattern = Pattern.compile("<(.*?)>")
-    }
 
     var ruleUrl = ""
         private set
@@ -95,10 +97,10 @@ class AnalyzeUrl(
         private set
     var type: String? = null
         private set
-    val headerMap = HashMap<String, String>()
+    val headerMap = LinkedHashMap<String, String>()
     private var urlNoQuery: String = ""
-    private var queryStr: String? = null
-    private val fieldMap = LinkedHashMap<String, String>()
+    private var encodedForm: String? = null
+    private var encodedQuery: String? = null
     private var charset: String? = null
     private var method = RequestMethod.GET
     private var proxy: String? = null
@@ -118,7 +120,9 @@ class AnalyzeUrl(
         coroutineContext = coroutineContext.minusKey(ContinuationInterceptor)
         val urlMatcher = paramPattern.matcher(baseUrl)
         if (urlMatcher.find()) baseUrl = baseUrl.substring(0, urlMatcher.start())
-        (headerMapF ?: source?.getHeaderMap(true))?.let {
+        (headerMapF ?: runScriptWithContext(coroutineContext) {
+            source?.getHeaderMap(hasLoginHeader)
+        })?.let {
             headerMap.putAll(it)
             if (it.containsKey("proxy")) {
                 proxy = it["proxy"]
@@ -245,7 +249,7 @@ class AnalyzeUrl(
             RequestMethod.GET -> {
                 val pos = url.indexOf('?')
                 if (pos != -1) {
-                    analyzeFields(url.substring(pos + 1))
+                    analyzeQuery(url.substring(pos + 1))
                     urlNoQuery = url.substring(0, pos)
                 }
             }
@@ -265,23 +269,68 @@ class AnalyzeUrl(
      * name=<BASE64> eg name=bmFtZQ==
      */
     private fun analyzeFields(fieldsTxt: String) {
-        queryStr = fieldsTxt
-        val queryS = fieldsTxt.splitNotBlank("&")
-        for (query in queryS) {
-            val queryPair = query.splitNotBlank("=", limit = 2)
-            val key = queryPair[0]
-            val value = queryPair.getOrNull(1) ?: ""
-            if (charset.isNullOrEmpty()) {
-                if (NetworkUtils.hasUrlEncoded(value)) {
-                    fieldMap[key] = value
-                } else {
-                    fieldMap[key] = URLEncoder.encode(value, "UTF-8")
-                }
-            } else if (charset == "escape") {
-                fieldMap[key] = EncoderUtils.escape(value)
-            } else {
-                fieldMap[key] = URLEncoder.encode(value, charset)
+        encodedForm = encodeParams(fieldsTxt, charset, false)
+    }
+
+    private fun analyzeQuery(query: String) {
+        encodedQuery = encodeParams(query, charset, true)
+    }
+
+    private fun encodeParams(params: String, charset: String?, isQuery: Boolean): String {
+        val checkEncoded = charset.isNullOrEmpty()
+        val charset = when {
+            charset.isNullOrEmpty() -> Charsets.UTF_8
+            charset == "escape" -> null
+            else -> charset(charset)
+        }
+        if (isQuery && charset != null) {
+            if (NetworkUtils.encodedQuery(params)) {
+                return params
             }
+            return queryEncoder.encode(params, charset)
+        }
+        val len = params.length
+        val sb = StringBuilder()
+        var pos = 0
+        while (pos <= len) {
+            if (sb.isNotEmpty()) {
+                sb.append("&")
+            }
+            var ampOffset = params.indexOf("&", pos)
+            if (ampOffset == -1) {
+                ampOffset = len
+            }
+            val eqOffset = params.indexOf("=", pos)
+            val key: String
+            val value: String?
+            if (eqOffset == -1 || eqOffset > ampOffset) {
+                key = params.substring(pos, ampOffset)
+                value = null
+            } else {
+                key = params.substring(pos, eqOffset)
+                value = params.substring(eqOffset + 1, ampOffset)
+            }
+            sb.appendEncoded(key, checkEncoded, charset)
+            if (value != null) {
+                sb.append("=")
+                sb.appendEncoded(value, checkEncoded, charset)
+            }
+            pos = ampOffset + 1
+        }
+        return sb.toString()
+    }
+
+    private fun StringBuilder.appendEncoded(
+        value: String,
+        checkEncoded: Boolean,
+        charset: Charset?
+    ) {
+        if (checkEncoded && NetworkUtils.encodedForm(value)) {
+            append(value)
+        } else if (charset == null) {
+            append(EncoderUtils.escape(value))
+        } else {
+            append(URLEncoder.encode(value, charset))
         }
     }
 
@@ -302,9 +351,13 @@ class AnalyzeUrl(
             bindings["source"] = source
             bindings["result"] = result
         }
-        val scope = RhinoScriptEngine.getRuntimeScope(bindings)
-        source?.getShareScope()?.let {
-            scope.prototype = it
+        val sharedScope = source?.getShareScope(coroutineContext)
+        val scope = if (sharedScope == null) {
+            RhinoScriptEngine.getRuntimeScope(bindings)
+        } else {
+            bindings.apply {
+                prototype = sharedScope
+            }
         }
         return RhinoScriptEngine.eval(jsStr, scope, coroutineContext)
     }
@@ -350,8 +403,8 @@ class AnalyzeUrl(
                         val res = getClient().newCallStrResponse(retry) {
                             addHeaders(headerMap)
                             url(urlNoQuery)
-                            if (fieldMap.isNotEmpty() || body.isNullOrBlank()) {
-                                postForm(fieldMap, true)
+                            if (!encodedForm.isNullOrEmpty() || body.isNullOrBlank()) {
+                                postForm(encodedForm ?: "")
                             } else {
                                 postJson(body)
                             }
@@ -384,8 +437,8 @@ class AnalyzeUrl(
                             url(urlNoQuery)
                             val contentType = headerMap["Content-Type"]
                             val body = body
-                            if (fieldMap.isNotEmpty() || body.isNullOrBlank()) {
-                                postForm(fieldMap, true)
+                            if (!encodedForm.isNullOrEmpty() || body.isNullOrBlank()) {
+                                postForm(encodedForm ?: "")
                             } else if (!contentType.isNullOrBlank()) {
                                 val requestBody = body.toRequestBody(contentType.toMediaType())
                                 post(requestBody)
@@ -394,7 +447,7 @@ class AnalyzeUrl(
                             }
                         }
 
-                        else -> get(urlNoQuery, fieldMap, true)
+                        else -> get(urlNoQuery, encodedQuery)
                     }
                 }.let {
                     val isXml = it.raw.body?.contentType()?.toString()
@@ -432,8 +485,8 @@ class AnalyzeUrl(
                         url(urlNoQuery)
                         val contentType = headerMap["Content-Type"]
                         val body = body
-                        if (fieldMap.isNotEmpty() || body.isNullOrBlank()) {
-                            postForm(fieldMap, true)
+                        if (!encodedForm.isNullOrEmpty() || body.isNullOrBlank()) {
+                            postForm(encodedForm ?: "")
                         } else if (!contentType.isNullOrBlank()) {
                             val requestBody = body.toRequestBody(contentType.toMediaType())
                             post(requestBody)
@@ -442,7 +495,7 @@ class AnalyzeUrl(
                         }
                     }
 
-                    else -> get(urlNoQuery, fieldMap, true)
+                    else -> get(urlNoQuery, encodedQuery)
                 }
             }
             return response
@@ -451,13 +504,19 @@ class AnalyzeUrl(
 
     private fun getClient(): OkHttpClient {
         val client = getProxyClient(proxy)
-        if (readTimeout == null) {
+        if (readTimeout == null && callTimeout == null) {
             return client
         }
-        return client.newBuilder()
-            .readTimeout(readTimeout, TimeUnit.MILLISECONDS)
-            .callTimeout(max(60 * 1000L, readTimeout * 2), TimeUnit.MILLISECONDS)
-            .build()
+        return client.newBuilder().run {
+            if (readTimeout != null) {
+                readTimeout(readTimeout, TimeUnit.MILLISECONDS)
+                callTimeout(max(60 * 1000L, readTimeout * 2), TimeUnit.MILLISECONDS)
+            }
+            if (callTimeout != null) {
+                callTimeout(callTimeout, TimeUnit.MILLISECONDS)
+            }
+            build()
+        }
     }
 
     fun getResponse(): Response {
@@ -467,6 +526,9 @@ class AnalyzeUrl(
     }
 
     private fun getByteArrayIfDataUri(): ByteArray? {
+        if (!urlNoQuery.startsWith("data:")) {
+            return null
+        }
         val dataUriFindResult = dataUriRegex.find(urlNoQuery)
         if (dataUriFindResult != null) {
             val dataUriBase64 = dataUriFindResult.groupValues[1]
@@ -580,11 +642,6 @@ class AnalyzeUrl(
         return GlideUrl(url, GlideHeaders(headerMap))
     }
 
-    fun getMediaItem(): MediaItem {
-        setCookie()
-        return ExoPlayerHelper.createMediaItem(url, headerMap)
-    }
-
     fun getUserAgent(): String {
         return headerMap.get(UA_NAME, true) ?: AppConfig.userAgent
     }
@@ -597,6 +654,20 @@ class AnalyzeUrl(
         return source
     }
 
+    companion object {
+        val paramPattern: Pattern = Pattern.compile("\\s*,\\s*(?=\\{)")
+        private val pagePattern = Pattern.compile("<(.*?)>")
+        private val queryEncoder =
+            RFC3986.UNRESERVED.orNew(PercentCodec.of("!$%&()*+,/:;=?@[\\]^`{|}"))
+
+        fun AnalyzeUrl.getMediaItem(): MediaItem {
+            setCookie()
+            return ExoPlayerHelper.createMediaItem(url, headerMap)
+        }
+
+    }
+
+    @Keep
     data class UrlOption(
         private var method: String? = null,
         private var charset: String? = null,
