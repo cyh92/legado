@@ -2,7 +2,9 @@
 
 ### 首次安装请点击以下按钮初始化书源
 
-# [点击导入书源](yuedu://booksource/importonline?src=https://gitee.com/cyh92/StaticPage/raw/master/book/book-1400.json)
+# [点击导入书源(部分)](yuedu://booksource/importonline?src=https://gitee.com/cyh92/StaticPage/raw/master/book/book-2400-1.json)
+
+# [点击导入书源(剩余)](yuedu://booksource/importonline?src=https://gitee.com/cyh92/StaticPage/raw/master/book/book-2400-2.json)
 # 更新日志
 
 * 由筱筱细雨凉生颊打包分发。
