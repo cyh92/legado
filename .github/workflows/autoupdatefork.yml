@@ -3,7 +3,7 @@ name: update fork
 
 on: 
   schedule:
-    - cron: '0 15 * * *' #0点定时任务
+    - cron: '6 7 * * *' #0点定时任务
 
 jobs:
   build:
