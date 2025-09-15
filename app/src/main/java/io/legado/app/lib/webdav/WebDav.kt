@@ -16,7 +16,9 @@ import io.legado.app.utils.findNSPrefix
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.toRequestBody
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -30,11 +32,11 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.MalformedURLException
 import java.net.URL
-import java.net.URLEncoder
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.coroutineContext
 
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 open class WebDav(
@@ -86,10 +88,7 @@ open class WebDav(
             .replace("davs://", "https://")
             .replace("dav://", "http://")
         return@lazy kotlin.runCatching {
-            URLEncoder.encode(raw, "UTF-8")
-                .replace("+", "%20")
-                .replace("%3A", ":")
-                .replace("%2F", "/")
+            raw.toHttpUrl().toString()
         }.getOrNull()
     }
     private val webDavClient by lazy {
@@ -110,7 +109,14 @@ open class WebDav(
             build()
         }
     }
-    val host: String? get() = url.host
+    private val host: String?
+        get() = url.host?.let {
+            if (it.startsWith("[")) {
+                it.substring(1, it.lastIndex)
+            } else {
+                it
+            }
+        }
 
     /**
      * 获取当前url文件信息
@@ -245,6 +251,8 @@ open class WebDav(
                 val requestBody = EXISTS.toRequestBody("application/xml".toMediaType())
                 method("PROPFIND", requestBody)
             }.use { it.isSuccessful }
+        }.onFailure {
+            coroutineContext.ensureActive()
         }.getOrDefault(false)
     }
 
@@ -259,6 +267,8 @@ open class WebDav(
                 val requestBody = EXISTS.toRequestBody("application/xml".toMediaType())
                 method("PROPFIND", requestBody)
             }.use { it.code != 401 }
+        }.onFailure {
+            coroutineContext.ensureActive()
         }.getOrDefault(true)
     }
 
@@ -279,6 +289,7 @@ open class WebDav(
                 }
             }
         }.onFailure {
+            coroutineContext.ensureActive()
             AppLog.put("WebDav创建目录失败\n${it.localizedMessage}", it)
         }.isSuccess
     }
@@ -335,6 +346,7 @@ open class WebDav(
                 }
             }
         }.onFailure {
+            coroutineContext.ensureActive()
             AppLog.put("WebDav上传失败\n${it.localizedMessage}", it)
             throw WebDavException("WebDav上传失败\n${it.localizedMessage}")
         }
@@ -355,6 +367,7 @@ open class WebDav(
                 }
             }
         }.onFailure {
+            coroutineContext.ensureActive()
             AppLog.put("WebDav上传失败\n${it.localizedMessage}", it)
             throw WebDavException("WebDav上传失败\n${it.localizedMessage}")
         }
@@ -375,6 +388,7 @@ open class WebDav(
                 }
             }
         }.onFailure {
+            coroutineContext.ensureActive()
             AppLog.put("WebDav上传失败\n${it.localizedMessage}", it)
             throw WebDavException("WebDav上传失败\n${it.localizedMessage}")
         }
@@ -405,6 +419,7 @@ open class WebDav(
                 checkResult(it)
             }
         }.onFailure {
+            coroutineContext.ensureActive()
             AppLog.put("WebDav删除失败\n${it.localizedMessage}", it)
         }.isSuccess
     }

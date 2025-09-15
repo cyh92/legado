@@ -1,6 +1,7 @@
 package io.legado.app.help.storage
 
 import android.content.Context
+import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import io.legado.app.BuildConfig
@@ -105,7 +106,6 @@ object Restore {
                 .forEach { book ->
                     book.coverUrl = LocalBook.getCoverPath(book)
                 }
-            val updateBooks = arrayListOf<Book>()
             val newBooks = arrayListOf<Book>()
             val ignoreLocalBook = BackupConfig.ignoreLocalBook
             it.forEach { book ->
@@ -113,12 +113,15 @@ object Restore {
                     return@forEach
                 }
                 if (appDb.bookDao.has(book.bookUrl)) {
-                    updateBooks.add(book)
+                    try {
+                        appDb.bookDao.update(book)
+                    } catch (_: SQLiteConstraintException) {
+                        appDb.bookDao.insert(book)
+                    }
                 } else {
                     newBooks.add(book)
                 }
             }
-            appDb.bookDao.update(*updateBooks.toTypedArray())
             appDb.bookDao.insert(*newBooks.toTypedArray())
         }
         fileToListT<Bookmark>(path, "bookmark.json")?.let {
