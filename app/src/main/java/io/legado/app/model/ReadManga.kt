@@ -49,6 +49,7 @@ object ReadManga : CoroutineScope by MainScope() {
     var durChapterIndex = 0 //章节位置
     var chapterSize = 0//总章节
     var durChapterPos = 0
+    var chapterChanged = false
     var prevMangaChapter: MangaChapter? = null
     var curMangaChapter: MangaChapter? = null
     var nextMangaChapter: MangaChapter? = null
@@ -326,21 +327,25 @@ object ReadManga : CoroutineScope by MainScope() {
 
     fun saveRead(pageChanged: Boolean = false) {
         executor.execute {
-            val book = book ?: return@execute
-            book.lastCheckCount = 0
-            book.durChapterTime = System.currentTimeMillis()
-            val chapterChanged = book.durChapterIndex != durChapterIndex
-            book.durChapterIndex = durChapterIndex
-            book.durChapterPos = durChapterPos
-            if (!pageChanged || chapterChanged) {
-                appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)?.let {
-                    book.durChapterTitle = it.getDisplayTitle(
-                        ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
-                        book.getUseReplaceRule()
-                    )
+            kotlin.runCatching {
+                val book = book ?: return@execute
+                book.lastCheckCount = 0
+                book.durChapterTime = System.currentTimeMillis()
+                val chapterChanged = book.durChapterIndex != durChapterIndex
+                book.durChapterIndex = durChapterIndex
+                book.durChapterPos = durChapterPos
+                if (!pageChanged || chapterChanged) {
+                    appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)?.let {
+                        book.durChapterTitle = it.getDisplayTitle(
+                            ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
+                            book.getUseReplaceRule()
+                        )
+                    }
                 }
+                appDb.bookDao.update(book)
+            }.onFailure {
+                AppLog.put("保存漫画阅读进度信息出错\n$it", it)
             }
-            appDb.bookDao.update(book)
         }
     }
 
